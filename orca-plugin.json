@@ -3,11 +3,41 @@
   "manifestVersion": 2,
   "id": "git-graph",
   "name": "Git Graph",
-  "version": "1.0.2",
-  "description": "Shows the commit graph of the focused workspace's Git repository.",
+  "version": "1.0.3",
+  "description": "A commit graph for the focused workspace's Git repository: history, diffs, compare, and everyday Git actions.",
+  "author": {
+    "name": "Tu_SE"
+  },
   "license": "MIT",
   "repository": "https://github.com/tuna-etech/gitgraph-orca",
+  "homepage": "https://github.com/tuna-etech/gitgraph-orca#readme",
   "icon": "assets/icon.png",
+  "screenshots": [
+    {
+      "path": "assets/screenshots/graph.png",
+      "alt": "Commit graph with coloured branch lanes, branch and tag labels, a stash row and the details of a merge commit on the right",
+      "caption": "Graph and commit details",
+      "theme": "dark"
+    },
+    {
+      "path": "assets/screenshots/diff.png",
+      "alt": "Side-by-side diff of a changed file inside the commit details pane",
+      "caption": "Side-by-side diff",
+      "theme": "dark"
+    },
+    {
+      "path": "assets/screenshots/actions.png",
+      "alt": "Right-click menu on a branch label with checkout, merge, rebase, interactive rebase and push actions",
+      "caption": "Git actions from the context menu",
+      "theme": "dark"
+    },
+    {
+      "path": "assets/screenshots/responsive.png",
+      "alt": "The same graph at three panel widths, with columns and labels adapting to the space",
+      "caption": "Adapts to any panel width",
+      "theme": "dark"
+    }
+  ],
   "engines": {
     "orca": ">=1.4.248"
   },

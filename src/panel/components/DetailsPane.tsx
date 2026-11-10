@@ -17,6 +17,7 @@ import { SIGNATURE_LABEL, linkify, openExternal, reviewKey, shortHash } from './
 import { useStoredChoice } from './details/storage'
 import { request } from '../request'
 import { formatDate } from '../dates'
+import { expandEmoji, parseCustomEmoji } from '../emoji'
 import { Check, ClipboardCheck, Copy, FolderTree, List, ListChecks, X } from 'lucide-preact'
 import { IconButton, ICON_SIZE } from './Toolbar'
 import { ContextMenu, type MenuItem } from './actions/ContextMenu'
@@ -349,6 +350,7 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
   }, [])
 
   const details = loaded?.details ?? null
+  const emoji = useMemo(() => parseCustomEmoji(settings.customEmojiShortcodes), [settings.customEmojiShortcodes])
   const title =
     selection.kind === 'compare'
       ? `Compare ${selection.from === UNCOMMITTED ? 'Uncommitted' : shortHash(selection.from)} ↔ ${selection.to === UNCOMMITTED ? 'Uncommitted' : shortHash(selection.to)}`
@@ -411,11 +413,11 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
               </div>
             )}
             <div class="dp-subject">
-              <Linked text={details.subject} linking={linking} />
+              <Linked text={expandEmoji(details.subject, emoji)} linking={linking} />
             </div>
             {details.body.trim() !== '' && (
               <div class="dp-body">
-                <Linked text={details.body.trim()} linking={linking} />
+                <Linked text={expandEmoji(details.body.trim(), emoji)} linking={linking} />
               </div>
             )}
           </div>

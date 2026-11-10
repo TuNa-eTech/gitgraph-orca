@@ -118,11 +118,11 @@ button.on { color: var(--orca-primary-foreground); background: var(--orca-primar
 .dp-row { display: flex; gap: 6px; align-items: center; min-height: 22px; }
 .dp-row > .dp-mono { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dp-row .gg-icon-btn { width: 22px; height: 22px; }
-/* Narrow details: stack labels over values. */
-@container dp (max-width: 300px) { .dp-row { flex-wrap: wrap; } .dp-label { width: 100%; } }
 .dp-parents { display: flex; flex-wrap: wrap; gap: 2px 8px; min-width: 0; }
 .dp-parent { display: inline-flex; gap: 2px; align-items: center; }
 .dp-label { flex: none; width: 70px; color: var(--orca-muted-foreground); }
+/* Narrow details: stack labels over values. */
+@container dp (max-width: 300px) { .dp-row { flex-wrap: wrap; } .dp-label { width: 100%; } }
 .dp-mono, .dp-lineno, .dp-linetext, .dp-hunk-header { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .dp-muted { color: var(--orca-muted-foreground); }
 .dp-sig-good { color: var(--orca-primary); }
@@ -163,8 +163,12 @@ button.on { color: var(--orca-primary-foreground); background: var(--orca-primar
 .dp-linetext { flex: 1; padding-right: 8px; }
 .dp-line-add { background: color-mix(in srgb, #3fb950 20%, transparent); }
 .dp-line-del { background: color-mix(in srgb, var(--orca-destructive) 20%, transparent); }
-.dp-split-row { display: grid; grid-template-columns: 1fr 1fr; }
+.dp-split-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .dp-split-row .dp-cell + .dp-cell { border-left: 1px solid var(--orca-border); }
+/* Side by side: each half gets half the pane and wraps long lines, so the new side never
+   scrolls out of view in a narrow details pane. */
+.dp-diff-split { min-width: 0; }
+.dp-diff-split .dp-cell { white-space: pre-wrap; overflow-wrap: anywhere; }
 .dp-cell-empty { background: var(--orca-secondary); opacity: 0.5; }
 .dp-modal-backdrop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--orca-background) 60%, transparent); }
 .dp-modal { display: flex; flex-direction: column; gap: 8px; width: min(420px, 90%); padding: 12px; border: 1px solid var(--orca-border); border-radius: 6px; background: var(--orca-background); }
