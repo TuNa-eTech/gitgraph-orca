@@ -44,3 +44,7 @@ pnpm validate     # orca plugin validate .
 ```
 
 See https://github.com/stablyai/orca/blob/main/docs/reference/plugin-authoring.md.
+
+## License
+
+[MIT](LICENSE). Features are modelled on vscode-git-graph's behaviour; no code from it is included.
