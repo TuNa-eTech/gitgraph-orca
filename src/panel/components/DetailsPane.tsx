@@ -13,11 +13,13 @@ import { DiffView } from './details/DiffView'
 import { FileViewer } from './details/FileViewer'
 import { FileList, FileTree } from './details/FileTree'
 import type { FileActions } from './details/FileTree'
-import { SIGNATURE_LABEL, formatTime, linkify, openExternal, reviewKey, shortHash } from './details/format'
+import { SIGNATURE_LABEL, linkify, openExternal, reviewKey, shortHash } from './details/format'
 import { useStoredChoice } from './details/storage'
 import { request } from '../request'
+import { formatDate } from '../dates'
 import { Check, ClipboardCheck, Copy, FolderTree, List, ListChecks, X } from 'lucide-preact'
 import { IconButton, ICON_SIZE } from './Toolbar'
+import { ContextMenu, type MenuItem } from './actions/ContextMenu'
 
 type Selection = { kind: 'commit'; hash: string } | { kind: 'compare'; from: string; to: string }
 
@@ -27,11 +29,14 @@ export type DetailsPaneProps = {
   settings: GraphSettings
   onClose(): void
   onNavigate(dir: 'up' | 'down' | 'parent' | 'child', alt: boolean): void
-  onContextMenuFile?(e: MouseEvent, path: string): void
+  /** Absolute path of the workspace root, for "Copy Absolute Path". */
+  rootPath: string
+  /** Selects a commit in the graph (used by the parent hash links). */
+  onSelectCommit(hash: string): void
 }
 
 type Loaded = { details: CommitDetails | null; files: FileChange[] }
-type Viewer = { kind: 'diff'; file: FileChange } | { kind: 'file'; file: FileChange; rev: string }
+type Viewer = { kind: 'diff'; file: FileChange; range: { from: string | null; to: string } } | { kind: 'file'; file: FileChange; rev: string }
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -128,14 +133,14 @@ function Person({ label, name, email, time, settings }: { label: string; name: s
     <div class="dp-row">
       <span class="dp-label">{label}</span>
       <span>
-        {name} <span class="dp-muted">&lt;{email}&gt;</span> · <span title={new Date(time * 1000).toLocaleString()}>{formatTime(time, settings.dateFormat)}</span>
+        {name} <span class="dp-muted">&lt;{email}&gt;</span> · <span title={new Date(time * 1000).toLocaleString()}>{formatDate(time, settings.dateFormat)}</span>
       </span>
     </div>
   )
 }
 
 export function DetailsPane(props: DetailsPaneProps): JSX.Element {
-  const { repoPath, selection, settings } = props
+  const { repoPath, selection, settings, rootPath } = props
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [linking, setLinking] = useState<IssueLinking | null>(null)
@@ -144,6 +149,7 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
   const [review, setReview] = useState<CodeReview | null>(null)
   const [copyFallback, setCopyFallback] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
 
   const selKey = reviewKey(selection)
   const isUncommitted = selection.kind === 'commit' && selection.hash === UNCOMMITTED
@@ -164,6 +170,7 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
     setError(null)
     setViewer(null)
     setNotice(null)
+    setMenu(null)
     const load = async (): Promise<Loaded> => {
       if (selection.kind === 'compare') {
         const r = await request('commit.compare', { from: selection.from, to: selection.to, repoPath })
@@ -227,6 +234,34 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
     return file.status === 'D' ? null : selection.hash
   }
 
+  /** Commit the files are shown at when diffing against the working tree; null when not applicable. */
+  const workingDiffRev = selection.kind === 'compare' ? selection.to : selection.hash
+
+  const fileMenu = (file: FileChange): MenuItem[] => {
+    const rev = viewRev(file)
+    const canWorking = workingDiffRev !== UNCOMMITTED && file.status !== 'D'
+    const absolute = [rootPath, repoPath, file.path].filter((p): p is string => p !== undefined && p !== '').join('/').replace(/\/{2,}/g, '/')
+    const items: MenuItem[] = [{ kind: 'item', label: 'View Diff', onClick: () => actions.onDiff(file) }]
+    items.push({ kind: 'item', label: 'View File at This Revision', disabled: rev === null, onClick: () => actions.onViewFile(file) })
+    if (canWorking) {
+      items.push({
+        kind: 'item',
+        label: 'Diff with Working File',
+        onClick: () => {
+          setViewer({ kind: 'diff', file, range: { from: workingDiffRev, to: UNCOMMITTED } })
+          void markReviewed(file.path)
+        }
+      })
+    }
+    items.push(
+      { kind: 'item', label: 'Open File', disabled: file.status === 'D', onClick: () => actions.onOpenFile(file) },
+      { kind: 'separator' },
+      { kind: 'item', label: 'Copy Relative Path', onClick: () => void copyText(file.path) },
+      { kind: 'item', label: 'Copy Absolute Path', onClick: () => void copyText(absolute) }
+    )
+    return items
+  }
+
   const markReviewed = async (path: string) => {
     if (review === null || !review.remaining.includes(path)) return
     try {
@@ -259,7 +294,7 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
 
   const actions: FileActions = {
     onDiff: (file) => {
-      setViewer({ kind: 'diff', file })
+      setViewer({ kind: 'diff', file, range: diffRange() })
       void markReviewed(file.path)
     },
     onViewFile: (file) => {
@@ -274,7 +309,7 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
       )
     },
     onCopyPath: (file) => void copyText(file.path),
-    onContext: props.onContextMenuFile ? (e, file) => props.onContextMenuFile?.(e, file.path) : undefined,
+    onContext: (e, file) => setMenu({ x: e.clientX, y: e.clientY, items: fileMenu(file) }),
     canViewFile: (file) => viewRev(file) !== null,
     remaining,
     activePath: viewer?.file.path
@@ -333,8 +368,7 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
 
   let content: JSX.Element
   if (viewer !== null && viewer.kind === 'diff') {
-    const range = diffRange()
-    content = <DiffView repoPath={repoPath} from={range.from} to={range.to} file={viewer.file} onBack={() => setViewer(null)} />
+    content = <DiffView repoPath={repoPath} from={viewer.range.from} to={viewer.range.to} file={viewer.file} onBack={() => setViewer(null)} />
   } else if (viewer !== null) {
     content = <FileViewer repoPath={repoPath} rev={viewer.rev} path={viewer.file.path} onBack={() => setViewer(null)} />
   } else {
@@ -353,9 +387,9 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
                 <span class="dp-parents">
                   {details.parents.map((p) => (
                     <span class="dp-parent" key={p}>
-                      <span class="dp-mono" title={p}>
+                      <button type="button" class="dp-link dp-mono" data-tip={`Go to ${p}`} onClick={() => props.onSelectCommit(p)}>
                         {shortHash(p)}
-                      </span>
+                      </button>
                       <CopyButton text={p} title="Copy parent hash" />
                     </span>
                   ))}
@@ -434,6 +468,7 @@ export function DetailsPane(props: DetailsPaneProps): JSX.Element {
       {notice !== null && <div class="dp-notice dp-error">{notice}</div>}
       {loaded === null && error === null && <div class="dp-notice">Loading…</div>}
       {(loaded !== null || viewer !== null) && content}
+      {menu !== null && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {copyFallback !== null && <CopyFallback text={copyFallback} onClose={() => setCopyFallback(null)} />}
     </div>
   )

@@ -53,6 +53,8 @@ export type GraphData = {
   headBranch: string | null
   /** All local branches, for the branch filter. */
   branches: string[]
+  /** Remote-tracking branches as `remote/name` (no `remote/HEAD`, none of hidden remotes). */
+  remoteBranches: string[]
   remotes: string[]
   /** More commits exist past `commits`. */
   hasMore: boolean
@@ -162,7 +164,9 @@ export type GitAction =
   | { kind: 'branch.deleteRemote'; remote: string; name: string }
   | { kind: 'branch.merge'; ref: string; mode: MergeMode; noCommit: boolean }
   | { kind: 'branch.rebase'; onto: string; ignoreDate: boolean }
-  | { kind: 'branch.push'; name: string; remote: string; setUpstream: boolean; force: 'none' | 'force-with-lease' | 'force' }
+  /** `setUpstream` sets the first remote of `remotes` as the upstream. */
+  | { kind: 'branch.push'; name: string; remotes: string[]; setUpstream: boolean; force: 'none' | 'force-with-lease' | 'force' }
+  /** With `squash`, the squashed changes are committed as "Merge branch '<remote>/<name>'". */
   | { kind: 'branch.pull'; remote: string; name: string; noFf: boolean; squash: boolean }
   | { kind: 'branch.fetchInto'; remote: string; remoteBranch: string; localBranch: string; force: boolean }
   // Commits
@@ -257,22 +261,47 @@ export type GraphSettings = {
   graphStyle: 'rounded' | 'angular'
   colours: string
   firstParentOnly: boolean
+  commitOrder: 'date' | 'author-date' | 'topo'
   initialLoadCommits: number
   loadMoreCommits: number
-  dateFormat: 'date-time' | 'date' | 'relative'
+  loadMoreAutomatically: boolean
+  scrollToHeadOnLoad: boolean
+  dateFormat: 'date-time' | 'date' | 'iso-date-time' | 'iso-date' | 'relative'
   dateType: 'author' | 'commit'
   showRemoteBranches: boolean
   showTags: boolean
   showStashes: boolean
   showUncommittedChanges: boolean
   showUntrackedFiles: boolean
+  /** Refresh when files in the working tree change (not only `.git`). */
+  watchWorkingTree: boolean
   muteMergeCommits: boolean
   useMailmap: boolean
   showSignatureStatus: boolean
   fetchAvatars: boolean
   refLabelAlignment: 'normal' | 'branches-left' | 'branches-right'
+  /** One label for `main` and `origin/main` when both point at the same commit. */
+  combineLocalAndRemoteLabels: boolean
+  /** `auto`: right of the graph on wide panels, below it on narrow ones. */
+  detailsLocation: 'auto' | 'bottom' | 'right'
+  fetchPrune: boolean
+  fetchPruneTags: boolean
   customBranchGlobPatterns: string
   customEmojiShortcodes: string
+  // Defaults of action dialogs
+  dialogCreateBranchCheckout: boolean
+  dialogAddTagType: 'annotated' | 'lightweight'
+  dialogMergeNoFastForward: boolean
+  dialogMergeSquash: boolean
+  dialogPullNoFastForward: boolean
+  dialogRebaseIgnoreDate: boolean
+  dialogDeleteBranchForce: boolean
+  dialogCherryPickRecordOrigin: boolean
+  dialogStashIncludeUntracked: boolean
+  /** Apply and Pop stash: reinstate the index. */
+  dialogStashReinstateIndex: boolean
+  dialogResetCommitMode: ResetMode
+  dialogResetUncommittedMode: 'mixed' | 'hard'
 }
 
 type Repo = { repoPath?: string }
@@ -293,6 +322,8 @@ declare module 'orca' {
     'action.run': { input: ActionInput; output: ActionResult }
     /** Runs a git command that needed credentials in a new Orca terminal. */
     'action.runInTerminal': { input: { command: string[] } & Repo; output: { terminalId: string } }
+    /** Starts `git rebase -i <onto>` in a new Orca terminal (git's editor runs there). */
+    'rebase.interactive': { input: { onto: string } & Repo; output: { terminalId: string } }
     /** `git archive` bytes as base64, for `files.saveAs`. */
     'commit.archive': { input: { ref: string; format: 'zip' | 'tar' } & Repo; output: { base64: string; name: string } }
     'repo.settings': { input: Repo | undefined; output: RepoSettings }

@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, realpathSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { assert, mockHost, mountWorker, test } from 'orca/testing'
 import { UNCOMMITTED } from '../shared/protocol'
+import { DEFAULT_SETTINGS } from '../shared/settings'
 import { isAuthFailure, terminalCommandLine } from './git/actions'
 import { parseNameStatus, parseNumstat } from './git/details'
 import { normaliseRelative } from './repo'
@@ -481,7 +482,7 @@ test('remote and user actions, and repo.settings', async () => {
     try {
       gitIn(bare, 'init', '--quiet', '--bare')
       await ok(worker, { kind: 'remote.add', name: 'origin', url: bare, fetch: false })
-      await ok(worker, { kind: 'branch.push', name: 'main', remote: 'origin', setUpstream: true, force: 'none' })
+      await ok(worker, { kind: 'branch.push', name: 'main', remotes: ['origin'], setUpstream: true, force: 'none' })
       await ok(worker, { kind: 'tag.push', name: 'v1', remotes: ['origin'] })
       await ok(worker, { kind: 'remote.fetch', remote: null, prune: true, pruneTags: false })
       const loaded = await load(worker)
@@ -507,7 +508,7 @@ test('remote and user actions, and repo.settings', async () => {
 test('authentication failures come back as auth-required with the git argv', async () => {
   await withRepo(async ({ repo, worker }) => {
     gitIn(repo, 'remote', 'add', 'origin', 'https://127.0.0.1:1/none.git')
-    const result = await run(worker, { kind: 'branch.push', name: 'main', remote: 'origin', setUpstream: false, force: 'none' })
+    const result = await run(worker, { kind: 'branch.push', name: 'main', remotes: ['origin'], setUpstream: false, force: 'none' })
     assert.ok(['error', 'auth-required'].includes((result as { status: string }).status))
     const terminal = await worker.request('action.runInTerminal', { command: ['push', 'origin', 'main'] })
     assert.deepEqual(terminal, { terminalId: 'term-1' })
@@ -629,6 +630,185 @@ test('graph.changed is posted when refs change on disk', async () => {
     assert.equal(worker.posts.some((post) => post.event === 'graph.changed'), true)
     assert.equal((worker.posts[0].payload as { path: string }).path.length > 0, true)
   })
+})
+
+function makeBare(): string {
+  const bare = mkdtempSync(path.join(tmpdir(), 'git-graph-bare-'))
+  gitIn(bare, 'init', '--quiet', '--bare')
+  return bare
+}
+
+test('graph.load lists remote branches, orders commits and filters by a remote branch', async () => {
+  await withRepo(async ({ repo, worker }) => {
+    gitIn(repo, 'update-ref', 'refs/remotes/origin/zeta', 'feature')
+    gitIn(repo, 'update-ref', 'refs/remotes/origin/main', 'main')
+    gitIn(repo, 'update-ref', 'refs/remotes/up/main', 'main')
+    gitIn(repo, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
+    gitIn(repo, 'remote', 'add', 'origin', '/nonexistent')
+    gitIn(repo, 'remote', 'add', 'up', '/nonexistent2')
+    await worker.request('repo.saveConfig', { config: { issueLinking: null, pullRequest: null, hideRemotes: ['up'] } })
+    const result = await load(worker)
+    assert.deepEqual(result.remoteBranches, ['origin/main', 'origin/zeta'])
+    const filtered = await load(worker, { branches: ['origin/zeta'] })
+    assert.deepEqual(filtered.commits.map((commit) => commit.subject), ['feature: one, two', 'root'])
+  })
+  for (const commitOrder of ['author-date', 'topo']) {
+    await withRepo(async ({ worker }) => {
+      assert.equal((await load(worker)).commits.length, 4)
+    }, { commitOrder })
+  }
+})
+
+test('checking out a remote branch reuses an existing local branch and reports when it is behind', async () => {
+  await withRepo(async ({ repo, worker }) => {
+    const bare = makeBare()
+    try {
+      gitIn(repo, 'remote', 'add', 'origin', bare)
+      gitIn(repo, 'push', '--quiet', '-u', 'origin', 'main')
+      const first = await run(worker, { kind: 'branch.checkout', name: 'origin/main', createLocal: 'fresh' })
+      assert.equal(first.status, 'ok', first.message)
+      assert.equal(gitIn(repo, 'branch', '--show-current').trim(), 'fresh')
+      await ok(worker, { kind: 'branch.checkout', name: 'main' })
+      // Make origin/main one commit ahead of the local main.
+      writeFileSync(path.join(repo, 'n.txt'), 'n\n')
+      gitIn(repo, 'add', '.')
+      gitIn(repo, 'commit', '--quiet', '-m', 'ahead')
+      gitIn(repo, 'push', '--quiet', 'origin', 'main')
+      gitIn(repo, 'reset', '--quiet', '--hard', 'HEAD~1')
+      await ok(worker, { kind: 'branch.checkout', name: 'feature' })
+      const result = await run(worker, { kind: 'branch.checkout', name: 'origin/main', createLocal: 'main' })
+      assert.equal(result.status, 'ok', result.message)
+      assert.match(result.output ?? '', /already exists/)
+      assert.match(result.output ?? '', /behind 1/)
+      assert.equal(gitIn(repo, 'branch', '--show-current').trim(), 'main')
+      // A local branch with no upstream is compared with the remote branch that was picked.
+      gitIn(repo, 'branch', 'solo', 'main')
+      gitIn(repo, 'commit', '--quiet', '--allow-empty', '-m', 'solo ahead')
+      gitIn(repo, 'push', '--quiet', 'origin', 'HEAD:solo')
+      gitIn(repo, 'reset', '--quiet', '--hard', 'HEAD~1')
+      const solo = await run(worker, { kind: 'branch.checkout', name: 'origin/solo', createLocal: 'solo' })
+      assert.equal(solo.status, 'ok', solo.message)
+      assert.match(solo.output ?? '', /behind 1\)/)
+    } finally {
+      rmSync(bare, { recursive: true, force: true })
+    }
+  })
+})
+
+test('pull with squash commits the squashed changes', async () => {
+  await withRepo(async ({ repo, worker }) => {
+    const bare = makeBare()
+    try {
+      gitIn(repo, 'remote', 'add', 'origin', bare)
+      gitIn(repo, 'push', '--quiet', 'origin', 'main', 'feature')
+      gitIn(repo, 'switch', '--quiet', '-c', 'pulled', 'main')
+      gitIn(repo, 'switch', '--quiet', 'feature')
+      writeFileSync(path.join(repo, 'f.txt'), 'f\n')
+      gitIn(repo, 'add', '.')
+      gitIn(repo, 'commit', '--quiet', '-m', 'on feature')
+      gitIn(repo, 'push', '--quiet', 'origin', 'feature')
+      gitIn(repo, 'switch', '--quiet', 'pulled')
+      const before = gitIn(repo, 'rev-list', '--count', 'HEAD').trim()
+      await ok(worker, { kind: 'branch.pull', remote: 'origin', name: 'feature', noFf: false, squash: true })
+      assert.equal(gitIn(repo, 'log', '-1', '--format=%s').trim(), "Merge branch 'origin/feature'")
+      assert.equal(Number(gitIn(repo, 'rev-list', '--count', 'HEAD').trim()), Number(before) + 1)
+      assert.equal(gitIn(repo, 'status', '--porcelain').trim(), '')
+      // Nothing new: still ok, no extra commit.
+      await ok(worker, { kind: 'branch.pull', remote: 'origin', name: 'feature', noFf: false, squash: true })
+      assert.equal(Number(gitIn(repo, 'rev-list', '--count', 'HEAD').trim()), Number(before) + 1)
+    } finally {
+      rmSync(bare, { recursive: true, force: true })
+    }
+  })
+})
+
+test('push to several remotes sets the upstream once and stops at the first failure', async () => {
+  await withRepo(async ({ repo, worker }) => {
+    const one = makeBare()
+    const two = makeBare()
+    try {
+      gitIn(repo, 'remote', 'add', 'one', one)
+      gitIn(repo, 'remote', 'add', 'two', two)
+      await ok(worker, { kind: 'branch.push', name: 'main', remotes: ['one', 'two'], setUpstream: true, force: 'none' })
+      const head = gitIn(repo, 'rev-parse', 'main').trim()
+      assert.equal(gitIn(one, 'rev-parse', 'main').trim(), head)
+      assert.equal(gitIn(two, 'rev-parse', 'main').trim(), head)
+      assert.equal(gitIn(repo, 'config', 'branch.main.remote').trim(), 'one')
+
+      gitIn(repo, 'remote', 'add', 'dead', path.join(tmpdir(), 'git-graph-no-such-remote'))
+      gitIn(repo, 'remote', 'add', 'three', makeBare())
+      const failed = await run(worker, { kind: 'branch.push', name: 'feature', remotes: ['one', 'dead', 'three'], setUpstream: false, force: 'none' })
+      assert.equal(failed.status, 'error')
+      assert.match(failed.message ?? '', /Push to dead failed/)
+      assert.equal(gitIn(one, 'rev-parse', 'feature').trim(), gitIn(repo, 'rev-parse', 'feature').trim())
+      assert.equal(gitIn(repo, 'ls-remote', 'three').trim(), '')
+    } finally {
+      rmSync(one, { recursive: true, force: true })
+      rmSync(two, { recursive: true, force: true })
+    }
+  })
+})
+
+test('rebase.interactive opens git rebase -i in a terminal and refuses a dirty working tree', async () => {
+  await withRepo(async ({ repo, worker }) => {
+    assert.deepEqual(await worker.request('rebase.interactive', { onto: 'feature' }), { terminalId: 'term-1' })
+    const [call] = worker.host.callsOf('terminal.create') as { workspaceId: string; command: string }[]
+    assert.equal(call.workspaceId, 'wt-1')
+    assert.equal(call.command, `cd ${realpathSync(repo)} && git rebase -i feature`)
+    await assert.rejects(worker.request('rebase.interactive', { onto: '--exec=x' }))
+    writeFileSync(path.join(repo, 'a.txt'), 'dirty\n')
+    await assert.rejects(worker.request('rebase.interactive', { onto: 'feature' }), (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'conflict')
+      assert.match((error as Error).message, /uncommitted changes/)
+      return true
+    })
+    assert.equal(worker.host.callsOf('terminal.create').length, 1)
+  })
+})
+
+test('the working tree is watched: tracked edits post graph.changed, ignored files do not', async () => {
+  const repo = makeRepo()
+  writeFileSync(path.join(repo, '.gitignore'), '*.log\nbuild/\n')
+  gitIn(repo, 'add', '.')
+  gitIn(repo, 'commit', '--quiet', '-m', 'ignore')
+  const worker = await mountWorker(main, { host: hostFor(repo) })
+  const changed = () => worker.posts.filter((post) => post.event === 'graph.changed').length
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  try {
+    await load(worker)
+    await sleep(500)
+    const base = changed()
+    writeFileSync(path.join(repo, 'debug.log'), 'x\n')
+    mkdirSync(path.join(repo, 'build'))
+    writeFileSync(path.join(repo, 'build', 'out.js'), 'x\n')
+    await sleep(1800)
+    assert.equal(changed(), base)
+    writeFileSync(path.join(repo, 'a.txt'), 'edited\n')
+    for (let i = 0; i < 40 && changed() === base; i++) await sleep(100)
+    assert.equal(changed() > base, true)
+  } finally {
+    await worker.deactivate()
+    rmSync(repo, { recursive: true, force: true })
+  }
+})
+
+test('the working tree is not watched when watchWorkingTree is off', async () => {
+  await withRepo(async ({ repo, worker }) => {
+    await load(worker)
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    writeFileSync(path.join(repo, 'a.txt'), 'edited\n')
+    await new Promise((resolve) => setTimeout(resolve, 1800))
+    assert.equal(worker.posts.some((post) => post.event === 'graph.changed'), false)
+  }, { watchWorkingTree: false })
+})
+
+test('orca-plugin.json settings match the shared defaults', () => {
+  const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'orca-plugin.json'), 'utf8')) as {
+    contributes: { settings: { key: string; default: unknown; enum?: string[] }[] }
+  }
+  const declared = Object.fromEntries(manifest.contributes.settings.map((setting) => [setting.key, setting.default]))
+  assert.deepEqual(declared, DEFAULT_SETTINGS)
+  assert.equal(manifest.contributes.settings.length <= 64, true)
 })
 
 test('pure helpers', () => {

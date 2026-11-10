@@ -11,6 +11,8 @@ import {
 import { runAction, archive, isTerminalCommand, terminalCommandLine } from './git/actions'
 import { commitDetails, compareFiles, containedIn, tagDetails, uncommittedFiles } from './git/details'
 import { fileAtRevision, fileDiff } from './git/diff'
+import { safeRef } from './git/args'
+import { git } from './git/run'
 import { loadLog, readUncommitted } from './git/log'
 import { exportConfig, loadConfig, readRepoSettings, saveConfig } from './git/config'
 import { normaliseRelative, requireRepo, resolveRepo, messageOf } from './repo'
@@ -24,6 +26,9 @@ let watcher: RepoWatcher | null = null
 export default function activate(orca: OrcaWorkerApi): void {
   const current = new RepoWatcher((cwd) => orca.panels.post('graph.changed', { path: cwd }))
   watcher = current
+  orca.settings.onDidChange(() => {
+    void readSettings(orca).then((settings) => current.setWorkingTree(settings.watchWorkingTree))
+  })
 
   orca.panels.handle('graph.load', async (input, { signal }) => {
     const resolved = await resolveRepo(orca, input?.repoPath, signal)
@@ -45,7 +50,7 @@ export default function activate(orca: OrcaWorkerApi): void {
         const uncommitted = await readUncommitted(repo.cwd, log.head, settings, signal)
         if (uncommitted !== null) commits = [uncommitted, ...commits]
       }
-      void current.watch(repo.cwd)
+      void current.watch(repo.cwd, settings.watchWorkingTree)
       const result: GraphLoadResult = {
         status: 'ok',
         workspace: repo.workspace,
@@ -53,6 +58,7 @@ export default function activate(orca: OrcaWorkerApi): void {
         head: log.head,
         headBranch: log.headBranch,
         branches: log.branches,
+        remoteBranches: log.remoteBranches,
         remotes: log.remotes,
         hasMore: log.hasMore,
         submodules: repo.submodules
@@ -128,6 +134,23 @@ export default function activate(orca: OrcaWorkerApi): void {
     const { terminalId } = await orca.host.call(
       'terminal.create',
       { workspaceId: repo.workspace.id, title: `git ${input.command[0] === 'git' ? input.command[1] : input.command[0]}`, command },
+      { signal }
+    )
+    return { terminalId }
+  })
+
+  orca.panels.handle('rebase.interactive', async (input, { signal }) => {
+    const repo = await requireRepo(orca, input.repoPath, signal)
+    const onto = safeRef(input.onto, 'revision')
+    const dirty = await git(repo.cwd, ['status', '--porcelain', '--untracked-files=no'], { signal })
+    if (dirty.trim() !== '') {
+      throw Object.assign(new Error('Commit, stash or discard your uncommitted changes before rebasing interactively.'), {
+        code: 'conflict'
+      })
+    }
+    const { terminalId } = await orca.host.call(
+      'terminal.create',
+      { workspaceId: repo.workspace.id, title: 'git rebase -i', command: terminalCommandLine(['rebase', '-i', onto], repo.cwd) },
       { signal }
     )
     return { terminalId }

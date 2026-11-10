@@ -41,6 +41,7 @@ export type ToolbarProps = {
   repoPath: string | undefined
   onRepoPath(path: string | undefined): void
   branches: string[] | null
+  remoteBranches: string[]
   patterns: string[]
   branchFilter: string[]
   onBranchFilter(value: string[]): void
@@ -74,7 +75,7 @@ export function Toolbar(p: ToolbarProps) {
           ))}
         </select>
       )}
-      {p.branches !== null && <BranchFilter branches={p.branches} patterns={p.patterns} value={p.branchFilter} onChange={p.onBranchFilter} />}
+      {p.branches !== null && <BranchFilter branches={p.branches} remoteBranches={p.showRemotes ? p.remoteBranches : []} patterns={p.patterns} value={p.branchFilter} onChange={p.onBranchFilter} />}
       <span class="gg-spacer" />
       {p.notice !== null && (
         <span class="gg-notice" title={p.notice} onClick={p.onClearNotice}>

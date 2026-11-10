@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import type { ActionResult, GitAction, GraphData } from '../../shared/protocol'
+import type { ActionResult, GitAction, GraphData, GraphSettings } from '../../shared/protocol'
 import { ContextMenu } from './actions/ContextMenu'
 import { Dialog, type DialogSpec } from './actions/Dialog'
 import { buildMenu, type MenuContext, type MenuTarget } from './actions/menus'
@@ -71,7 +71,7 @@ function base64ToBuffer(base64: string): ArrayBuffer {
 
 // ---------- Host ----------
 
-export function ActionsHost(props: { graph: GraphData; repoPath?: string; onDone(): void }) {
+export function ActionsHost(props: { graph: GraphData; settings: GraphSettings; repoPath?: string; onDone(): void }) {
   const { graph, repoPath } = props
   const { menu, settingsOpen, toast } = useStore()
   const [dialog, setDialog] = useState<{ id: number; spec: DialogSpec } | null>(null)
@@ -112,12 +112,34 @@ export function ActionsHost(props: { graph: GraphData; repoPath?: string; onDone
       return false
     }
 
+    /** After checking out a remote branch whose local branch already existed and lags behind, offer to pull it. */
+    const offerPull = (action: GitAction, result: ActionResult) => {
+      if (action.kind !== 'branch.checkout' || !action.createLocal || result.status !== 'ok') return
+      const output = result.output ?? ''
+      if (!/already exists/.test(output) || !/\(behind \d+\)/.test(output)) return
+      const remote = latest.current.graph.remotes.find((r) => action.name.startsWith(`${r}/`))
+      if (remote === undefined) return
+      const branch = action.name.slice(remote.length + 1)
+      const pullSettings = latest.current.settings
+      open({
+        title: 'Pull Remote Branch',
+        message: `Local branch "${action.createLocal}" is behind "${action.name}". Pull "${action.name}" into it now?`,
+        fields: [
+          { kind: 'checkbox', id: 'noFf', label: 'Always create a merge commit (--no-ff)', value: pullSettings.dialogPullNoFastForward },
+          { kind: 'checkbox', id: 'squash', label: 'Squash (--squash)' },
+        ],
+        primary: { label: 'Pull' },
+        onSubmit: (v) => run({ kind: 'branch.pull', remote, name: branch, noFf: v.noFf === true, squash: v.squash === true }),
+      })
+    }
+
     const run = async (action: GitAction) => {
       try {
         const result = await request('action.run', { action, repoPath: latest.current.repoPath })
         if (handleResult(result, action)) {
           close()
           latest.current.onDone()
+          offerPull(action, result)
         }
       } catch (error) {
         showError('Git Command Failed', messageOf(error))
@@ -202,6 +224,12 @@ export function ActionsHost(props: { graph: GraphData; repoPath?: string; onDone
       }
     }
 
+    const interactiveRebase = async (onto: string) => {
+      await request('rebase.interactive', { onto, repoPath: latest.current.repoPath })
+      close()
+      showToast('info', 'Interactive rebase started in a terminal')
+    }
+
     return {
       get graph() {
         return latest.current.graph
@@ -213,6 +241,10 @@ export function ActionsHost(props: { graph: GraphData; repoPath?: string; onDone
       createPullRequest: (b) => void createPullRequest(b),
       viewTag: (n) => void viewTag(n),
       archive: (r, f) => void archive(r, f),
+      interactiveRebase,
+      get settings() {
+        return latest.current.settings
+      },
     }
   }, [])
 
@@ -236,6 +268,7 @@ export function ActionsHost(props: { graph: GraphData; repoPath?: string; onDone
         <RepoSettingsDialog
           repoPath={repoPath}
           graph={graph}
+          settings={props.settings}
           run={runForSettings}
           onClose={() => setState({ settingsOpen: false })}
           onChanged={props.onDone}

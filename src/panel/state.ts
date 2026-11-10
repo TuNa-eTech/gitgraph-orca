@@ -7,7 +7,8 @@ import {
   type GraphSettings,
   type ViewState
 } from '../shared/protocol'
-import { DEFAULT_SETTINGS, readSettings } from './settings'
+import { DEFAULT_SETTINGS } from '../shared/settings'
+import { readSettings } from './settings'
 import { request } from './request'
 
 export const EMPTY_VIEW: ViewState = { columnWidths: {}, hiddenColumns: [], branchFilter: [] }
@@ -75,7 +76,7 @@ export function useGraphState(): GraphState {
         const next = stored ?? EMPTY_VIEW
         live.current.view = next
         setView(next)
-        setRestore(next.scrollTop ? { top: next.scrollTop, id: ++restoreId.current } : undefined)
+        setRestore({ top: next.scrollTop ?? 0, id: ++restoreId.current })
       }
       if (live.current.limit === 0) {
         const fresh = await readSettings()

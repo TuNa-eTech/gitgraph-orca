@@ -8,7 +8,7 @@ import { expandEmoji } from '../emoji'
 import { Graph } from '../graph/Graph'
 import type { GraphLayout } from '../graph/layout'
 import { ROW_HEIGHT, naturalGraphWidth } from '../graph/metrics'
-import { RefLabel, refsOf } from './RefLabel'
+import { RefLabel, combineRefs, refsOf } from './RefLabel'
 import { useAvatar } from './useAvatar'
 
 export type ColumnId = 'graph' | 'description' | 'date' | 'author' | 'commit'
@@ -130,7 +130,7 @@ export function CommitTable(props: CommitTableProps) {
       const el = scrollRef.current
       if (el === null) return
       setScrollTop(el.scrollTop)
-      if (props.hasMore && !props.loading && el.scrollTop + el.clientHeight >= el.scrollHeight - 160) props.onLoadMore()
+      if (settings.loadMoreAutomatically && props.hasMore && !props.loading && el.scrollTop + el.clientHeight >= el.scrollHeight - 160) props.onLoadMore()
     })
     clearTimeout(idle.current)
     idle.current = window.setTimeout(() => {
@@ -141,8 +141,8 @@ export function CommitTable(props: CommitTableProps) {
   // When the loaded range does not fill the viewport, keep loading.
   useEffect(() => {
     const el = scrollRef.current
-    if (el !== null && props.hasMore && !props.loading && el.scrollHeight <= el.clientHeight + 40) props.onLoadMore()
-  }, [total, props.hasMore, props.loading, viewportH])
+    if (el !== null && settings.loadMoreAutomatically && props.hasMore && !props.loading && el.scrollHeight <= el.clientHeight + 40) props.onLoadMore()
+  }, [total, props.hasMore, props.loading, viewportH, settings.loadMoreAutomatically])
 
   const startResize = (id: ColumnId, e: MouseEvent) => {
     e.preventDefault()
@@ -302,15 +302,19 @@ function Author({ commit, fetchAvatars }: { commit: Commit; fetchAvatars: boolea
 }
 
 function Description({ commit, headBranch, settings, emoji, onRefContextMenu, compactRefs }: CellProps) {
-  const allRefs = refsOf(commit)
+  const combined = useMemo(
+    () => (settings.combineLocalAndRemoteLabels ? combineRefs(refsOf(commit)) : { refs: refsOf(commit), remotesOf: new Map<Ref, string[]>() }),
+    [commit, settings.combineLocalAndRemoteLabels]
+  )
+  const allRefs = combined.refs
   const text = useMemo(() => expandEmoji(commit.subject, emoji), [commit.subject, emoji])
-  const label = (r: Ref) => <RefLabel key={`${r.kind}:${r.name}`} commit={commit} gitRef={r} headBranch={headBranch} onContextMenu={onRefContextMenu} />
+  const label = (r: Ref) => <RefLabel key={`${r.kind}:${r.name}`} commit={commit} gitRef={r} headBranch={headBranch} alsoRemotes={combined.remotesOf.get(r)} onContextMenu={onRefContextMenu} />
   // Narrow description: keep the most telling label (checked-out branch, then any branch) and
   // summarise the rest as "+N", whose tooltip names them all.
   const primary = allRefs.find((r) => r.kind === 'head' && r.name === headBranch) ?? allRefs.find((r) => r.kind === 'head') ?? allRefs[0]
   const refs = compactRefs && allRefs.length > 1 && primary !== undefined ? [primary] : allRefs
   const overflow = refs.length < allRefs.length ? (
-    <span key="more" class="gg-ref gg-ref-more" title={allRefs.map((r) => r.name || commit.stash || 'stash').join('\n')}>
+    <span key="more" class="gg-ref gg-ref-more" data-tip={allRefs.flatMap((r) => [r.name || commit.stash || 'stash', ...(combined.remotesOf.get(r) ?? []).map((x) => `${x}/${r.name}`)]).join('\n')}>
       +{allRefs.length - refs.length}
     </span>
   ) : null

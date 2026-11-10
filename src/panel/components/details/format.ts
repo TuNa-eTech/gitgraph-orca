@@ -1,5 +1,5 @@
 // Formatting and text-linking helpers for the details pane.
-import type { DiffInput, FileStatus, GraphSettings, IssueLinking, SignatureStatus } from '../../../shared/protocol'
+import type { DiffInput, FileStatus, IssueLinking, SignatureStatus } from '../../../shared/protocol'
 
 export type ChangeStatus = FileStatus
 
@@ -25,31 +25,6 @@ export const SIGNATURE_LABEL: Record<SignatureStatus, string> = {
 
 export function shortHash(hash: string): string {
   return hash.slice(0, 8)
-}
-
-const RELATIVE_UNITS: [string, number][] = [
-  ['year', 31536000],
-  ['month', 2592000],
-  ['week', 604800],
-  ['day', 86400],
-  ['hour', 3600],
-  ['minute', 60]
-]
-
-export function formatTime(seconds: number, format: GraphSettings['dateFormat']): string {
-  const date = new Date(seconds * 1000)
-  if (format === 'date') return date.toLocaleDateString()
-  if (format === 'relative') {
-    const diff = Math.max(0, Math.floor(Date.now() / 1000) - seconds)
-    for (const [unit, size] of RELATIVE_UNITS) {
-      if (diff >= size) {
-        const n = Math.floor(diff / size)
-        return `${n} ${unit}${n === 1 ? '' : 's'} ago`
-      }
-    }
-    return 'just now'
-  }
-  return date.toLocaleString()
 }
 
 export function baseName(path: string): string {

@@ -1,4 +1,4 @@
-import type { Commit, GitAction, GraphData } from '../../../shared/protocol'
+import type { Commit, GitAction, GraphData, GraphSettings } from '../../../shared/protocol'
 import type { MenuItem } from './ContextMenu'
 import { validateRefName, type DialogField, type DialogSpec, type DialogValues } from './Dialog'
 
@@ -13,6 +13,7 @@ export type MenuTarget =
 /** What the menus need from the host; implemented in actions.tsx. */
 export type MenuContext = {
   graph: GraphData
+  settings: GraphSettings
   /** Runs the action; on success closes the dialog and refreshes, on failure shows the error. Never rejects. */
   run(action: GitAction): Promise<void>
   open(spec: DialogSpec): void
@@ -21,6 +22,8 @@ export type MenuContext = {
   createPullRequest(branch: string): void
   viewTag(name: string): void
   archive(ref: string, format: 'zip' | 'tar'): void
+  /** Starts `git rebase -i <onto>` in an Orca terminal. */
+  interactiveRebase(onto: string): Promise<void>
 }
 
 const shortHash = (hash: string) => hash.slice(0, 8)
@@ -69,7 +72,7 @@ function branchItems(ctx: MenuContext, name: string): MenuItem[] {
     item(
       'Delete Branch…',
       () => {
-        const fields: DialogField[] = [{ kind: 'checkbox', id: 'force', label: 'Force delete (even if not fully merged)' }]
+        const fields: DialogField[] = [{ kind: 'checkbox', id: 'force', label: 'Force delete (even if not fully merged)', value: ctx.settings.dialogDeleteBranchForce }]
         for (const r of remotesWithBranch) fields.push({ kind: 'checkbox', id: `remote:${r}`, label: `Also delete on remote "${r}"` })
         ctx.open({
           title: 'Delete Branch',
@@ -94,6 +97,7 @@ function branchItems(ctx: MenuContext, name: string): MenuItem[] {
       isCurrent || graph.head === null
     ),
     item('Rebase Current Branch onto This…', () => rebaseDialog(ctx, `"${name}"`, name), isCurrent),
+    item('Interactive Rebase Current Branch onto This…', () => interactiveRebaseDialog(ctx, `"${name}"`, name), isCurrent),
     sep,
     item('Push Branch…', () => pushDialog(ctx, name), graph.remotes.length === 0),
     item('Create Pull Request…', () => ctx.createPullRequest(name)),
@@ -111,7 +115,7 @@ function mergeDialog(ctx: MenuContext, label: string, ref: string): void {
         kind: 'radio',
         id: 'mode',
         label: 'Mode',
-        value: 'ff',
+        value: ctx.settings.dialogMergeSquash ? 'squash' : ctx.settings.dialogMergeNoFastForward ? 'no-ff' : 'ff',
         options: [
           { value: 'ff', label: 'Fast-forward when possible' },
           { value: 'no-ff', label: 'Always create a merge commit (--no-ff)' },
@@ -135,20 +139,30 @@ function rebaseDialog(ctx: MenuContext, label: string, onto: string): void {
   ctx.open({
     title: 'Rebase Current Branch',
     message: `Rebase ${ctx.graph.headBranch ? `"${ctx.graph.headBranch}"` : 'the current HEAD'} onto ${label}?`,
-    fields: [{ kind: 'checkbox', id: 'ignoreDate', label: 'Ignore author date (--ignore-date)' }],
+    fields: [{ kind: 'checkbox', id: 'ignoreDate', label: 'Ignore author date (--ignore-date)', value: ctx.settings.dialogRebaseIgnoreDate }],
     primary: { label: 'Rebase' },
     onSubmit: (v) => ctx.run({ kind: 'branch.rebase', onto, ignoreDate: v.ignoreDate === true }),
   })
 }
 
+function interactiveRebaseDialog(ctx: MenuContext, label: string, onto: string): void {
+  ctx.open({
+    title: 'Interactive Rebase',
+    message: `Rebase ${ctx.graph.headBranch ? `"${ctx.graph.headBranch}"` : 'the current HEAD'} onto ${label} interactively? Git's todo list opens in a new Orca terminal, where you edit and finish the rebase.`,
+    primary: { label: 'Open in Terminal' },
+    onSubmit: () => ctx.interactiveRebase(onto),
+  })
+}
+
 function pushDialog(ctx: MenuContext, name: string): void {
   const remotes = ctx.graph.remotes
+  const preferred = remotes.includes('origin') ? 'origin' : remotes[0]
   ctx.open({
     title: 'Push Branch',
-    message: `Push branch "${name}".`,
+    message: `Push branch "${name}" to:`,
     fields: [
-      { kind: 'select', id: 'remote', label: 'Remote', options: remoteOptions(remotes), value: remotes.includes('origin') ? 'origin' : remotes[0] },
-      { kind: 'checkbox', id: 'setUpstream', label: 'Set upstream (--set-upstream)', value: true },
+      ...remotes.map((r): DialogField => ({ kind: 'checkbox', id: `remote:${r}`, label: r, value: r === preferred })),
+      { kind: 'checkbox', id: 'setUpstream', label: 'Set upstream (--set-upstream, first selected remote)', value: true },
       {
         kind: 'radio',
         id: 'force',
@@ -163,10 +177,12 @@ function pushDialog(ctx: MenuContext, name: string): void {
     ],
     primary: { label: 'Push' },
     onSubmit: (v) => {
+      const chosen = remotes.filter((r) => v[`remote:${r}`] === true)
+      if (chosen.length === 0) throw new Error('Select at least one remote.')
       const action: GitAction = {
         kind: 'branch.push',
         name,
-        remote: String(v.remote),
+        remotes: chosen,
         setUpstream: v.setUpstream === true,
         force: v.force as 'none' | 'force-with-lease' | 'force',
       }
@@ -175,7 +191,7 @@ function pushDialog(ctx: MenuContext, name: string): void {
         confirm(
           ctx,
           'Force Push',
-          `Force pushing "${name}" to "${action.remote}" can overwrite commits on the remote. Continue?`,
+          `Force pushing "${name}" to ${chosen.map((r) => `"${r}"`).join(', ')} can overwrite commits on the remote. Continue?`,
           'Force Push',
           action,
           true
@@ -235,7 +251,7 @@ function remoteBranchItems(ctx: MenuContext, remote: string, fullName: string): 
         title: 'Pull into Current Branch',
         message: `Pull "${fullName}" into ${graph.headBranch ? `"${graph.headBranch}"` : 'the current HEAD'}.`,
         fields: [
-          { kind: 'checkbox', id: 'noFf', label: 'Always create a merge commit (--no-ff)' },
+          { kind: 'checkbox', id: 'noFf', label: 'Always create a merge commit (--no-ff)', value: ctx.settings.dialogPullNoFastForward },
           { kind: 'checkbox', id: 'squash', label: 'Squash (--squash)' },
         ],
         primary: { label: 'Pull' },
@@ -273,7 +289,7 @@ function commitItems(ctx: MenuContext, commit: Commit): MenuItem[] {
             kind: 'radio',
             id: 'type',
             label: 'Type',
-            value: 'lightweight',
+            value: ctx.settings.dialogAddTagType,
             options: [
               { value: 'lightweight', label: 'Lightweight' },
               { value: 'annotated', label: 'Annotated' },
@@ -312,7 +328,7 @@ function commitItems(ctx: MenuContext, commit: Commit): MenuItem[] {
         message: `Create a branch at commit ${short}.`,
         fields: [
           { kind: 'text', id: 'name', label: 'Branch name', validate: (v) => validateRefName(v, 'Branch name') },
-          { kind: 'checkbox', id: 'checkout', label: 'Check out', value: true },
+          { kind: 'checkbox', id: 'checkout', label: 'Check out', value: ctx.settings.dialogCreateBranchCheckout },
         ],
         primary: { label: 'Create' },
         onSubmit: (v) => ctx.run({ kind: 'branch.create', name: String(v.name), at: hash, checkout: v.checkout === true }),
@@ -334,7 +350,7 @@ function commitItems(ctx: MenuContext, commit: Commit): MenuItem[] {
         fields: [
           ...mainlineField(),
           { kind: 'checkbox', id: 'noCommit', label: "Don't commit (--no-commit)" },
-          { kind: 'checkbox', id: 'recordOrigin', label: 'Record origin in message (-x)' },
+          { kind: 'checkbox', id: 'recordOrigin', label: 'Record origin in message (-x)', value: ctx.settings.dialogCherryPickRecordOrigin },
         ],
         primary: { label: 'Cherry Pick' },
         onSubmit: (v) =>
@@ -365,6 +381,7 @@ function commitItems(ctx: MenuContext, commit: Commit): MenuItem[] {
     sep,
     item('Merge into Current Branch…', () => mergeDialog(ctx, `commit ${short}`, hash), isHead),
     item('Rebase Current Branch onto This…', () => rebaseDialog(ctx, `commit ${short}`, hash), isHead),
+    item('Interactive Rebase Current Branch onto This…', () => interactiveRebaseDialog(ctx, `commit ${short}`, hash), isHead),
     item('Reset Current Branch to This…', () =>
       ctx.open({
         title: 'Reset Current Branch',
@@ -374,7 +391,7 @@ function commitItems(ctx: MenuContext, commit: Commit): MenuItem[] {
             kind: 'radio',
             id: 'mode',
             label: 'Mode',
-            value: 'mixed',
+            value: ctx.settings.dialogResetCommitMode,
             options: [
               { value: 'soft', label: 'Soft: keep index and working tree' },
               { value: 'mixed', label: 'Mixed: reset index, keep working tree' },
@@ -445,7 +462,7 @@ function tagItems(ctx: MenuContext, name: string, annotated: boolean): MenuItem[
 
 function stashItems(ctx: MenuContext, commit: Commit): MenuItem[] {
   const selector = commit.stash ?? ''
-  const reinstate: DialogField = { kind: 'checkbox', id: 'reinstate', label: 'Reinstate index (--index)' }
+  const reinstate: DialogField = { kind: 'checkbox', id: 'reinstate', label: 'Reinstate index (--index)', value: ctx.settings.dialogStashReinstateIndex }
   return [
     item('Apply Stash…', () =>
       ctx.open({
@@ -490,7 +507,7 @@ function uncommittedItems(ctx: MenuContext): MenuItem[] {
         title: 'Stash Uncommitted Changes',
         fields: [
           { kind: 'text', id: 'message', label: 'Message (optional)' },
-          { kind: 'checkbox', id: 'untracked', label: 'Include untracked files (--include-untracked)' },
+          { kind: 'checkbox', id: 'untracked', label: 'Include untracked files (--include-untracked)', value: ctx.settings.dialogStashIncludeUntracked },
         ],
         primary: { label: 'Stash' },
         onSubmit: (v) => ctx.run({ kind: 'stash.push', message: String(v.message).trim(), includeUntracked: v.untracked === true }),
@@ -505,7 +522,7 @@ function uncommittedItems(ctx: MenuContext): MenuItem[] {
             kind: 'radio',
             id: 'mode',
             label: 'Mode',
-            value: 'mixed',
+            value: ctx.settings.dialogResetUncommittedMode,
             options: [
               { value: 'mixed', label: 'Mixed: unstage changes, keep working tree' },
               { value: 'hard', label: 'Hard: discard all tracked changes' },

@@ -37,7 +37,8 @@ export function App() {
   const [detailsWidth, setDetailsWidth] = useState(420)
   const rootRef = useRef<HTMLDivElement>(null)
   const size = useElementSize(rootRef)
-  const dock: 'right' | 'bottom' = size.width >= SIDE_DOCK_MIN_WIDTH ? 'right' : 'bottom'
+  const dock: 'right' | 'bottom' =
+    settings.detailsLocation === 'auto' ? (size.width >= SIDE_DOCK_MIN_WIDTH ? 'right' : 'bottom') : settings.detailsLocation
   const [find, setFind] = useState<FindState | null>(null)
   const [findFocus, setFindFocus] = useState(0)
   const [matchIndex, setMatchIndex] = useState(0)
@@ -82,7 +83,11 @@ export function App() {
   useEffect(() => {
     if (g.restore !== undefined && data !== null && restored.current !== g.restore.id) {
       restored.current = g.restore.id
-      requestAnimationFrame(() => tableApi.current?.setScrollTop(g.restore?.top ?? 0))
+      const headRow = settings.scrollToHeadOnLoad && data.head ? layout.indexOf.get(data.head) : undefined
+      requestAnimationFrame(() => {
+        if (headRow !== undefined) tableApi.current?.scrollToRow(headRow, true)
+        else tableApi.current?.setScrollTop(g.restore?.top ?? 0)
+      })
     }
   }, [g.restore, data])
 
@@ -140,13 +145,28 @@ export function App() {
         if (e.metaKey || e.ctrlKey) {
           const base = cur.kind === 'commit' ? cur.hash : cur.from
           if (base === hash) return cur
-          return { kind: 'compare', from: base, to: hash }
+          // `from` is the older commit (lower in the graph, larger row); the uncommitted row is row 0.
+          const baseRow = layout.indexOf.get(base) ?? row
+          return baseRow > row ? { kind: 'compare', from: base, to: hash } : { kind: 'compare', from: hash, to: base }
         }
         if (cur.kind === 'commit' && cur.hash === hash) return null
         return { kind: 'commit', hash }
       })
     },
-    [commits]
+    [commits, layout]
+  )
+
+  const selectCommit = useCallback(
+    (hash: string) => {
+      const row = layout.indexOf.get(hash)
+      if (row === undefined) {
+        setNotice('Commit not loaded; load more commits')
+        return
+      }
+      setSelection({ kind: 'commit', hash })
+      tableApi.current?.scrollToRow(row, true)
+    },
+    [layout]
   )
 
   const children = useMemo(() => {
@@ -274,7 +294,7 @@ export function App() {
     setNotice(null)
     try {
       const r = await request('action.run', {
-        action: { kind: 'remote.fetch', remote: null, prune: false, pruneTags: false },
+        action: { kind: 'remote.fetch', remote: null, prune: settings.fetchPrune, pruneTags: settings.fetchPruneTags },
         repoPath: g.repoPath
       })
       if (r.status !== 'ok') setNotice(r.message)
@@ -284,7 +304,7 @@ export function App() {
     } finally {
       setFetching(false)
     }
-  }, [g.repoPath, g.reload])
+  }, [g.repoPath, g.reload, settings.fetchPrune, settings.fetchPruneTags])
 
   const openFind = useCallback(() => {
     setFind((cur) => cur ?? { query: '', caseSensitive: false, regex: false })
@@ -368,6 +388,7 @@ export function App() {
         repoPath={g.repoPath}
         onRepoPath={g.setRepoPath}
         branches={data?.branches ?? null}
+        remoteBranches={data?.remoteBranches ?? []}
         patterns={patterns}
         branchFilter={view.branchFilter}
         onBranchFilter={(v) => g.patchView({ branchFilter: v })}
@@ -439,13 +460,14 @@ export function App() {
               settings={settings}
               onClose={() => setSelection(null)}
               onNavigate={navigate}
-              onContextMenuFile={undefined}
+              rootPath={data.workspace.path}
+              onSelectCommit={selectCommit}
             />
           </div>
         </>
       )}
       </div>
-      {data !== null && <ActionsHost graph={data} repoPath={g.repoPath} onDone={g.reload} />}
+      {data !== null && <ActionsHost graph={data} settings={settings} repoPath={g.repoPath} onDone={g.reload} />}
       <TooltipLayer />
       {tip !== null && (
         <div class="gg-tooltip" style={{ left: `${Math.min(tip.x + 12, window.innerWidth - 280)}px`, top: `${tip.y + ROW_HEIGHT / 2}px` }}>

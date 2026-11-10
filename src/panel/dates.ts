@@ -38,7 +38,17 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['minute', 60]
 ]
 
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** `2026-11-10` or `2026-11-10 11:25` in local time. */
+function isoFormat(seconds: number, withTime: boolean): string {
+  const d = new Date(seconds * 1000)
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  return withTime ? `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}` : date
+}
+
 export function formatDate(seconds: number, format: GraphSettings['dateFormat'], now = Date.now()): string {
+  if (format === 'iso-date-time' || format === 'iso-date') return isoFormat(seconds, format === 'iso-date-time')
   if (format !== 'relative') return dateTimeFormat(format).format(new Date(seconds * 1000))
   const diff = Math.round(now / 1000 - seconds)
   for (const [unit, size] of UNITS) {

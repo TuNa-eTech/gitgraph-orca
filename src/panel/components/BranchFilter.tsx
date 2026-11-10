@@ -3,13 +3,15 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 
 export type BranchFilterProps = {
   branches: string[]
+  /** Remote-tracking branches (`origin/main`); empty when remote branches are hidden. */
+  remoteBranches: string[]
   /** Names of the user's custom glob patterns (`Name|glob` lines). */
   patterns: string[]
   value: string[]
   onChange(value: string[]): void
 }
 
-export function BranchFilter({ branches, patterns, value, onChange }: BranchFilterProps) {
+export function BranchFilter({ branches, remoteBranches, patterns, value, onChange }: BranchFilterProps) {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
 
@@ -65,6 +67,9 @@ export function BranchFilter({ branches, patterns, value, onChange }: BranchFilt
           {patterns.map(item)}
           {branches.length > 0 && <div class="gg-menu-sep" />}
           {branches.map(item)}
+          {remoteBranches.length > 0 && <div class="gg-menu-sep" />}
+          {remoteBranches.length > 0 && <div class="gg-menu-heading">Remote branches</div>}
+          {remoteBranches.map(item)}
         </div>
       )}
     </div>

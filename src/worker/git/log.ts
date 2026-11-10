@@ -9,6 +9,8 @@ import {
 } from '../../shared/protocol'
 import { git, gitTry } from './run'
 
+const ORDER_FLAGS = { date: '--date-order', 'author-date': '--author-date-order', topo: '--topo-order' } as const
+
 const FIELD = '\x1f'
 const RECORD = '\x1e'
 
@@ -19,6 +21,7 @@ export type LogResult = {
   head: string | null
   headBranch: string | null
   branches: string[]
+  remoteBranches: string[]
   remotes: string[]
   hasMore: boolean
 }
@@ -26,6 +29,7 @@ export type LogResult = {
 type RefTables = {
   byHash: Map<string, Ref[]>
   branches: string[]
+  remoteBranches: string[]
   remotes: string[]
 }
 
@@ -75,7 +79,7 @@ export async function loadLog(
   let commits: Commit[] = []
   let hasMore = false
   if (revArgs !== null) {
-    const args = ['log', '--date-order', `--max-count=${limit + 1}`, `--format=${logFormat(settings)}`]
+    const args = ['log', ORDER_FLAGS[settings.commitOrder], `--max-count=${limit + 1}`, `--format=${logFormat(settings)}`]
     if (settings.firstParentOnly) args.push('--first-parent')
     args.push(...revArgs, '--')
     const stdout = await git(cwd, args, { signal })
@@ -97,6 +101,7 @@ export async function loadLog(
     head,
     headBranch: headBranch === null ? null : headBranch.trim() || null,
     branches: refs.branches,
+    remoteBranches: refs.remoteBranches,
     remotes: refs.remotes,
     hasMore
   }
@@ -158,6 +163,7 @@ async function readRefs(
   const byLength = [...remotes].sort((a, b) => b.length - a.length)
   const byHash = new Map<string, Ref[]>()
   const branches: string[] = []
+  const remoteBranches: string[] = []
   const add = (hash: string, ref: Ref): void => {
     const list = byHash.get(hash)
     if (list === undefined) byHash.set(hash, [ref])
@@ -176,6 +182,7 @@ async function readRefs(
       if (short.endsWith('/HEAD')) continue
       const remote = byLength.find((candidate) => short.startsWith(candidate + '/')) ?? short.split('/')[0]
       if (hidden.has(remote)) continue
+      remoteBranches.push(short)
       add(objectName, { kind: 'remote', name: short, remote })
     } else if (refName.startsWith('refs/tags/')) {
       if (!settings.showTags) continue
@@ -190,7 +197,8 @@ async function readRefs(
     list.sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name))
   }
   branches.sort((a, b) => a.localeCompare(b))
-  return { byHash, branches, remotes }
+  remoteBranches.sort((a, b) => a.localeCompare(b))
+  return { byHash, branches, remoteBranches, remotes }
 }
 
 /**
@@ -227,8 +235,8 @@ function buildRevisionArgs(
       else args.push(`--branches=${entry}`, ...(settings.showRemoteBranches ? [`--remotes=${entry}`] : []))
     } else if (localSet.has(entry)) {
       args.push(`refs/heads/${entry}`)
-    } else if (refs.remotes.some((remote) => entry.startsWith(remote + '/'))) {
-      if (settings.showRemoteBranches) args.push(`refs/remotes/${entry}`)
+    } else if (refs.remoteBranches.includes(entry)) {
+      args.push(`refs/remotes/${entry}`)
     } else if (entry === 'HEAD' && hasHead) {
       args.push('HEAD')
     }

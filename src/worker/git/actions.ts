@@ -3,7 +3,16 @@ import { safeHash, safeRef, safeStash, safeValue } from './args'
 import { git, gitTry, runGit } from './run'
 
 /** One git invocation. `okCodes` are extra exit codes that count as success. */
-export type Step = { args: string[]; okCodes?: readonly number[] }
+export type Step = {
+  args: string[]
+  okCodes?: readonly number[]
+  /** Names the step in failure messages (for example the remote of one push). */
+  label?: string
+  /** Skip the step when nothing is staged. */
+  onlyIfStaged?: boolean
+  /** Added to the action's output when the step succeeds. */
+  note?: string
+}
 
 const AUTH_PATTERNS = [
   /could not read (Username|Password)/i,
@@ -40,18 +49,23 @@ export async function runAction(cwd: string, action: GitAction, signal: AbortSig
   for (const step of steps) {
     let result
     try {
+      if (step.onlyIfStaged) {
+        const staged = await runGit(cwd, ['diff', '--cached', '--quiet'], { signal })
+        if (staged.code === 0) continue
+      }
       result = await runGit(cwd, step.args, { signal, mutate: true, timeoutMs: 10 * 60_000 })
     } catch (error) {
       return { status: 'error', message: error instanceof Error ? error.message : String(error) }
     }
     const text = [result.stderr.trim(), result.stdout.toString('utf8').trim()].filter((part) => part !== '').join('\n')
     if (result.code !== 0 && !(step.okCodes?.includes(result.code) ?? false)) {
-      if (isAuthFailure(result.stderr)) {
-        return { status: 'auth-required', message: text, command: step.args }
-      }
-      return { status: 'error', message: text || `git ${step.args[0]} failed (exit ${result.code})` }
+      const detail = text || `git ${step.args[0]} failed (exit ${result.code})`
+      const message = step.label === undefined ? detail : `${step.label}: ${detail}`
+      if (isAuthFailure(result.stderr)) return { status: 'auth-required', message, command: step.args }
+      return { status: 'error', message }
     }
     if (text !== '') outputs.push(text)
+    if (step.note !== undefined) outputs.push(step.note)
   }
   const output = outputs.join('\n')
   return output === '' ? { status: 'ok' } : { status: 'ok', output }
@@ -68,7 +82,16 @@ async function planAction(cwd: string, action: GitAction, signal: AbortSignal): 
     case 'branch.checkout': {
       const name = safeRef(action.name, 'branch name')
       if (action.createLocal !== undefined && action.createLocal !== '') {
-        return [{ args: ['checkout', '-b', safeRef(action.createLocal, 'branch name'), '--track', name, '--'] }]
+        const local = safeRef(action.createLocal, 'branch name')
+        const exists = await gitTry(cwd, ['rev-parse', '--verify', '-q', `refs/heads/${local}`], { signal })
+        if (exists === null) return [{ args: ['checkout', '-b', local, '--track', name, '--'] }]
+        // The local branch exists: switch to it and say whether it lags behind the remote branch
+        // the person picked (not its upstream, which may be unset or another remote).
+        let note = `Local branch ${local} already exists; checked it out instead of creating it.`
+        const behind = await gitTry(cwd, ['rev-list', '--count', `refs/heads/${local}..refs/remotes/${name}`], { signal })
+        const count = behind === null ? 0 : Number(behind.trim())
+        if (count > 0) note += ` It is behind ${name} by ${count} commit${count === 1 ? '' : 's'} (behind ${count}).`
+        return [{ args: ['checkout', local, '--'], note }]
       }
       return [{ args: ['checkout', name, '--'] }]
     }
@@ -104,19 +127,29 @@ async function planAction(cwd: string, action: GitAction, signal: AbortSignal): 
       return [{ args }]
     }
     case 'branch.push': {
-      const args = ['push']
-      if (action.setUpstream) args.push('--set-upstream')
-      if (action.force === 'force-with-lease') args.push('--force-with-lease')
-      else if (action.force === 'force') args.push('--force')
-      args.push(safeRef(action.remote, 'remote'), safeRef(action.name, 'branch name'))
-      return [{ args }]
+      if (action.remotes.length === 0) throw new Error('Choose at least one remote.')
+      const name = safeRef(action.name, 'branch name')
+      return action.remotes.map((remote, index) => {
+        const args = ['push']
+        if (action.setUpstream && index === 0) args.push('--set-upstream')
+        if (action.force === 'force-with-lease') args.push('--force-with-lease')
+        else if (action.force === 'force') args.push('--force')
+        args.push(safeRef(remote, 'remote'), name)
+        return action.remotes.length > 1 ? { args, label: `Push to ${remote} failed` } : { args }
+      })
     }
     case 'branch.pull': {
       const args = ['pull', '--no-edit']
       if (action.noFf) args.push('--no-ff')
-      if (action.squash) args.push('--squash')
-      args.push(safeRef(action.remote, 'remote'), safeRef(action.name, 'branch name'))
-      return [{ args }]
+      // A squash is a merge: never let `pull.rebase` or divergent histories turn it into a failure.
+      if (action.squash) args.push('--squash', '--no-rebase')
+      const remote = safeRef(action.remote, 'remote')
+      const name = safeRef(action.name, 'branch name')
+      args.push(remote, name)
+      const steps: Step[] = [{ args }]
+      // `--squash` stages the result without committing; commit it like a merge would.
+      if (action.squash) steps.push({ args: ['commit', '-m', `Merge branch '${remote}/${name}'`], onlyIfStaged: true })
+      return steps
     }
     case 'branch.fetchInto': {
       const args = ['fetch']

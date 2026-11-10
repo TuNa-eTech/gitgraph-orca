@@ -4,19 +4,21 @@ import type {
   ActionResult,
   GitAction,
   GraphData,
+  GraphSettings,
   PullRequestConfig,
   PullRequestProvider,
   RemoteInfo,
   RepoConfig,
   RepoSettings as RepoSettingsData,
 } from '../../../shared/protocol'
-import { Modal } from './Dialog'
+import { Dialog, Modal } from './Dialog'
 import { CUSTOM_TEMPLATE_HELP, defaultPullRequestConfig } from './pullRequest'
 import { request } from '../../request'
 
 type Props = {
   repoPath?: string
   graph: GraphData
+  settings: GraphSettings
   /** Runs a git action and returns its result; the caller handles auth prompts. */
   run: (action: GitAction) => Promise<ActionResult>
   onClose: () => void
@@ -76,11 +78,12 @@ function userDraft(u: { name: string | null; email: string | null }): UserDraft 
 }
 
 export function RepoSettingsDialog(props: Props) {
-  const { repoPath, graph, run, onClose, onChanged } = props
+  const { repoPath, graph, settings, run, onClose, onChanged } = props
   const [data, setData] = useState<RepoSettingsData | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [status, setStatus] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<RemoteInfo | null>(null)
 
   const [remoteDraft, setRemoteDraft] = useState<RemoteDraft | null>(null)
   const [users, setUsers] = useState<{ local: UserDraft; global: UserDraft }>({
@@ -187,8 +190,7 @@ export function RepoSettingsDialog(props: Props) {
   }
 
   const deleteRemote = (r: RemoteInfo) => {
-    if (!window.confirm(`Delete remote "${r.name}"?`)) return
-    void runAction({ kind: 'remote.delete', name: r.name }, 'Remote deleted.', true)
+    setConfirmDelete(r)
   }
 
   const setUser = (scope: 'local' | 'global') => {
@@ -241,6 +243,7 @@ export function RepoSettingsDialog(props: Props) {
   )
 
   return (
+    <>
     <Modal
       title="Repository Settings"
       wide
@@ -265,7 +268,7 @@ export function RepoSettingsDialog(props: Props) {
         <div class="act-section-head">
           <h3>Remotes</h3>
           <div class="act-buttons">
-            <button type="button" disabled={busy || remoteNames.length === 0} onClick={() => void runAction({ kind: 'remote.fetch', remote: null, prune: false, pruneTags: false }, 'Fetched all remotes.', true)}>
+            <button type="button" disabled={busy || remoteNames.length === 0} onClick={() => void runAction({ kind: 'remote.fetch', remote: null, prune: settings.fetchPrune, pruneTags: settings.fetchPruneTags }, 'Fetched all remotes.', true)}>
               Fetch all
             </button>
             <button type="button" disabled={busy} onClick={() => setRemoteDraft({ oldName: null, name: '', url: '', pushUrl: '', fetch: true })}>
@@ -296,7 +299,7 @@ export function RepoSettingsDialog(props: Props) {
                     <button type="button" disabled={busy} onClick={() => setRemoteDraft({ oldName: r.name, name: r.name, url: r.url ?? '', pushUrl: r.pushUrl && r.pushUrl !== r.url ? r.pushUrl : '', fetch: false })}>
                       Edit
                     </button>
-                    <button type="button" disabled={busy} onClick={() => void runAction({ kind: 'remote.fetch', remote: r.name, prune: false, pruneTags: false }, `Fetched ${r.name}.`, true)}>
+                    <button type="button" disabled={busy} onClick={() => void runAction({ kind: 'remote.fetch', remote: r.name, prune: settings.fetchPrune, pruneTags: settings.fetchPruneTags }, `Fetched ${r.name}.`, true)}>
                       Fetch
                     </button>
                     <button type="button" disabled={busy} onClick={() => void runAction({ kind: 'remote.prune', name: r.name }, `Pruned ${r.name}.`, true)}>
@@ -478,5 +481,21 @@ export function RepoSettingsDialog(props: Props) {
         ))}
       </section>
     </Modal>
+    {confirmDelete !== null ? (
+      <Dialog
+        spec={{
+          title: 'Delete Remote',
+          message: `Delete remote "${confirmDelete.name}"?`,
+          primary: { label: 'Delete', danger: true },
+          onSubmit: async () => {
+            const target = confirmDelete
+            setConfirmDelete(null)
+            await runAction({ kind: 'remote.delete', name: target.name }, 'Remote deleted.', true)
+          },
+        }}
+        onClose={() => setConfirmDelete(null)}
+      />
+    ) : null}
+    </>
   )
 }

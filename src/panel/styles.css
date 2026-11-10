@@ -101,8 +101,7 @@ button.on { color: var(--orca-primary-foreground); background: var(--orca-primar
 .gg-th-graph .gg-th-label { visibility: hidden; }
 .gg-tooltip { position: fixed; z-index: 60; max-width: 420px; padding: 6px 8px; overflow-wrap: anywhere; white-space: pre-wrap; pointer-events: none; font-size: 11px; background: var(--orca-popover, var(--orca-background)); border: 1px solid var(--orca-border); border-radius: 4px; box-shadow: 0 4px 12px rgb(0 0 0 / 0.3); }
 /* Icon-button tooltip (TooltipLayer): above dialogs and menus, never takes the pointer. */
-.gg-tip { position: fixed; z-index: 400; display: flex; gap: 8px; align-items: center; max-width: min(280px, calc(100vw - 8px)); padding: 3px 7px; font-size: 11px; line-height: 16px; white-space: nowrap; pointer-events: none; color: var(--orca-popover-foreground, var(--orca-foreground)); background: var(--orca-popover, var(--orca-background)); border: 1px solid var(--orca-border); border-radius: 4px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.3); }
-.gg-tip { animation: gg-tip-in 90ms ease-out; }
+.gg-tip { position: fixed; z-index: 400; display: flex; gap: 8px; align-items: center; max-width: min(320px, calc(100vw - 8px)); padding: 3px 7px; font-size: 11px; line-height: 16px; white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; color: var(--orca-popover-foreground, var(--orca-foreground)); background: var(--orca-popover, var(--orca-background)); border: 1px solid var(--orca-border); border-radius: 4px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.3); animation: gg-tip-in 90ms ease-out; }
 @keyframes gg-tip-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .gg-tip { animation: none; } }
 .gg-tip-kbd { padding: 0 4px; font: 10px/14px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--orca-muted-foreground); border: 1px solid var(--orca-border); border-radius: 3px; }
@@ -227,3 +226,7 @@ button.on { color: var(--orca-primary-foreground); background: var(--orca-primar
 .act-preview { margin-top: 4px; overflow-wrap: anywhere; }
 .act-status { flex: 1; font-size: 11px; color: var(--orca-muted-foreground); overflow-wrap: anywhere; }
 .act-status.error { color: var(--orca-destructive); }
+.dp-link { padding: 0; color: var(--orca-primary); background: none; border: 0; cursor: pointer; }
+.dp-link:hover { text-decoration: underline; }
+.gg-ref-remote-suffix { margin-left: 4px; padding-left: 4px; font-weight: 400; border-left: 1px solid currentColor; opacity: 0.8; }
+.gg-menu-heading { padding: 4px 10px 2px; font-size: 11px; color: var(--orca-muted-foreground); }

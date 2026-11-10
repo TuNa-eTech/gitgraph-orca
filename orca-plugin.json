@@ -46,6 +46,107 @@
         "maxLength": 500
       },
       {
+        "key": "refLabelAlignment",
+        "title": "Ref label alignment",
+        "description": "Where branch and tag labels sit in the commit message column.",
+        "type": "string",
+        "default": "normal",
+        "enum": [
+          "normal",
+          "branches-left",
+          "branches-right"
+        ],
+        "enumLabels": [
+          "Next to the message",
+          "Branches left, tags right",
+          "Branches right, tags left"
+        ]
+      },
+      {
+        "key": "combineLocalAndRemoteLabels",
+        "title": "Combine local and remote labels",
+        "description": "Show one label for main and origin/main when both point at the same commit.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "detailsLocation",
+        "title": "Details location",
+        "description": "Where the commit details view appears.",
+        "type": "string",
+        "default": "auto",
+        "enum": [
+          "auto",
+          "bottom",
+          "right"
+        ],
+        "enumLabels": [
+          "Automatic (right when wide, below when narrow)",
+          "Below the graph",
+          "Right of the graph"
+        ]
+      },
+      {
+        "key": "muteMergeCommits",
+        "title": "Mute merge commits",
+        "description": "Draw merge commits in a muted style.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "dateFormat",
+        "title": "Date format",
+        "description": "How commit dates are shown.",
+        "type": "string",
+        "default": "date-time",
+        "enum": [
+          "date-time",
+          "date",
+          "iso-date-time",
+          "iso-date",
+          "relative"
+        ],
+        "enumLabels": [
+          "Date and time",
+          "Date only",
+          "ISO date and time",
+          "ISO date only",
+          "Relative (5 minutes ago)"
+        ]
+      },
+      {
+        "key": "dateType",
+        "title": "Date type",
+        "description": "Which date the Date column and ordering show.",
+        "type": "string",
+        "default": "author",
+        "enum": [
+          "author",
+          "commit"
+        ],
+        "enumLabels": [
+          "Author date",
+          "Commit date"
+        ]
+      },
+      {
+        "key": "commitOrder",
+        "title": "Commit order",
+        "description": "How commits are ordered in the graph.",
+        "type": "string",
+        "default": "date",
+        "enum": [
+          "date",
+          "author-date",
+          "topo"
+        ],
+        "enumLabels": [
+          "Commit date (topological)",
+          "Author date (topological)",
+          "Topological"
+        ]
+      },
+      {
         "key": "firstParentOnly",
         "title": "First parent only",
         "description": "Follow only the first parent of merge commits when reading history.",
@@ -71,36 +172,18 @@
         "maximum": 5000
       },
       {
-        "key": "dateFormat",
-        "title": "Date format",
-        "description": "How commit dates are shown.",
-        "type": "string",
-        "default": "date-time",
-        "enum": [
-          "date-time",
-          "date",
-          "relative"
-        ],
-        "enumLabels": [
-          "Date and time",
-          "Date only",
-          "Relative (5 minutes ago)"
-        ]
+        "key": "loadMoreAutomatically",
+        "title": "Load more automatically",
+        "description": "Load the next commits when scrolling to the bottom of the graph.",
+        "type": "boolean",
+        "default": true
       },
       {
-        "key": "dateType",
-        "title": "Date type",
-        "description": "Which date the Date column and ordering show.",
-        "type": "string",
-        "default": "author",
-        "enum": [
-          "author",
-          "commit"
-        ],
-        "enumLabels": [
-          "Author date",
-          "Commit date"
-        ]
+        "key": "scrollToHeadOnLoad",
+        "title": "Scroll to HEAD on load",
+        "description": "Scroll to the checked-out commit when the graph opens.",
+        "type": "boolean",
+        "default": false
       },
       {
         "key": "showRemoteBranches",
@@ -138,9 +221,9 @@
         "default": true
       },
       {
-        "key": "muteMergeCommits",
-        "title": "Mute merge commits",
-        "description": "Draw merge commits in a muted style.",
+        "key": "watchWorkingTree",
+        "title": "Watch working tree",
+        "description": "Refresh the graph when files in the working tree change (files ignored by Git are skipped). On Linux only the top-level directory is watched when recursive watching is unavailable.",
         "type": "boolean",
         "default": true
       },
@@ -166,21 +249,18 @@
         "default": false
       },
       {
-        "key": "refLabelAlignment",
-        "title": "Ref label alignment",
-        "description": "Where branch and tag labels sit in the commit message column.",
-        "type": "string",
-        "default": "normal",
-        "enum": [
-          "normal",
-          "branches-left",
-          "branches-right"
-        ],
-        "enumLabels": [
-          "Next to the message",
-          "Branches left, tags right",
-          "Branches right, tags left"
-        ]
+        "key": "fetchPrune",
+        "title": "Prune on fetch",
+        "description": "Pass --prune when fetching.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "fetchPruneTags",
+        "title": "Prune tags on fetch",
+        "description": "Pass --prune-tags when fetching.",
+        "type": "boolean",
+        "default": false
       },
       {
         "key": "customBranchGlobPatterns",
@@ -199,6 +279,116 @@
         "default": "",
         "multiline": true,
         "maxLength": 4000
+      },
+      {
+        "key": "dialogCreateBranchCheckout",
+        "title": "Create branch: check out",
+        "description": "Default for \"Check out\" in the Create Branch dialog.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "dialogAddTagType",
+        "title": "Add tag: type",
+        "description": "Default tag type in the Add Tag dialog.",
+        "type": "string",
+        "default": "annotated",
+        "enum": [
+          "annotated",
+          "lightweight"
+        ],
+        "enumLabels": [
+          "Annotated",
+          "Lightweight"
+        ]
+      },
+      {
+        "key": "dialogMergeNoFastForward",
+        "title": "Merge: create a new commit",
+        "description": "Default for \"Create a new commit even if fast-forward is possible\".",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "dialogMergeSquash",
+        "title": "Merge: squash commits",
+        "description": "Default for \"Squash commits\" in the Merge dialog.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "dialogPullNoFastForward",
+        "title": "Pull: create a new commit",
+        "description": "Default for \"Create a new commit even if fast-forward is possible\" in the Pull dialog.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "dialogRebaseIgnoreDate",
+        "title": "Rebase: ignore date",
+        "description": "Default for \"Ignore date\" in the Rebase dialog.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "dialogDeleteBranchForce",
+        "title": "Delete branch: force",
+        "description": "Default for \"Force delete\" in the Delete Branch dialog.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "dialogCherryPickRecordOrigin",
+        "title": "Cherry-pick: record origin",
+        "description": "Default for \"Record origin\" (-x) in the Cherry Pick dialog.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "dialogStashIncludeUntracked",
+        "title": "Stash: include untracked",
+        "description": "Default for \"Include untracked files\" in the Stash dialog.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "dialogStashReinstateIndex",
+        "title": "Stash: reinstate index",
+        "description": "Default for \"Reinstate index\" when applying or popping a stash.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "dialogResetCommitMode",
+        "title": "Reset to commit: mode",
+        "description": "Default mode when resetting the branch to a commit.",
+        "type": "string",
+        "default": "mixed",
+        "enum": [
+          "soft",
+          "mixed",
+          "hard"
+        ],
+        "enumLabels": [
+          "Soft",
+          "Mixed",
+          "Hard"
+        ]
+      },
+      {
+        "key": "dialogResetUncommittedMode",
+        "title": "Reset uncommitted: mode",
+        "description": "Default mode when resetting uncommitted changes.",
+        "type": "string",
+        "default": "mixed",
+        "enum": [
+          "mixed",
+          "hard"
+        ],
+        "enumLabels": [
+          "Mixed",
+          "Hard"
+        ]
       }
     ]
   },
