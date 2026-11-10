@@ -13,6 +13,7 @@
     "dev": "orca plugin dev watch ."
   },
   "dependencies": {
+    "lucide-preact": "^1.70.0",
     "preact": "^10.27.2"
   },
   "devDependencies": {

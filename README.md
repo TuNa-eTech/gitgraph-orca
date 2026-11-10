@@ -7,10 +7,11 @@ VS Code's Git Graph.
 
 | Path | What it is |
 | --- | --- |
-| `orca-plugin.json` | Manifest: `trusted-worker`, one html panel, `workspace:read`. |
+| `orca-plugin.json` | Manifest: `trusted-worker`, one html panel, settings, workspace/terminal/storage capabilities. |
 | `src/shared/protocol.ts` | Panel <-> worker contract (`graph.load`), typed on both sides. |
 | `src/worker/main.ts` | Worker (Node). Finds the focused workspace's path and runs `git log`. Orca transpiles it; no build. |
-| `src/worker/git-log.ts` | `git log --all --date-order` runner and parser. |
+| `src/worker/git/` | git wrappers: `run` (execFile), `log`, `details`, `diff`, `actions`, `config`. |
+| `src/worker/{repo,state,settings,avatars,watch}.ts` | Repo resolution, view/review storage, settings, Gravatar cache, `.git` watcher. |
 | `src/panel/` | Html panel in Preact, bundled by esbuild into `dist/panel/`. |
 | `scripts/build.mjs` | Panel build (`--watch` to rebuild on save). |
 | `assets/icon.svg` | Source of the plugin icon; `assets/icon.png` (256×256) is what the manifest uses. |

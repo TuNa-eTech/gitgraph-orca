@@ -7,7 +7,7 @@
   "description": "Shows the commit graph of the focused workspace's Git repository.",
   "icon": "assets/icon.png",
   "engines": {
-    "orca": ">=1.4.246"
+    "orca": ">=1.4.248"
   },
   "execution": "trusted-worker",
   "pluginApi": 1,
@@ -20,11 +20,203 @@
         "icon": "layers",
         "entry": "dist/panel/index.html"
       }
+    ],
+    "settings": [
+      {
+        "key": "graphStyle",
+        "title": "Graph style",
+        "description": "Shape of the lines joining commits.",
+        "type": "string",
+        "default": "rounded",
+        "enum": [
+          "rounded",
+          "angular"
+        ],
+        "enumLabels": [
+          "Rounded",
+          "Angular"
+        ]
+      },
+      {
+        "key": "colours",
+        "title": "Branch colours",
+        "description": "Comma-separated CSS colours cycled through for branch lines.",
+        "type": "string",
+        "default": "#4e9af1,#e5534b,#57ab5a,#c69026,#a371f7,#39c5cf,#e0823d,#d56cb5,#8ab43f,#7d8bf0",
+        "maxLength": 500
+      },
+      {
+        "key": "firstParentOnly",
+        "title": "First parent only",
+        "description": "Follow only the first parent of merge commits when reading history.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "initialLoadCommits",
+        "title": "Initial commits",
+        "description": "Commits loaded when the graph opens.",
+        "type": "integer",
+        "default": 300,
+        "minimum": 10,
+        "maximum": 5000
+      },
+      {
+        "key": "loadMoreCommits",
+        "title": "Commits per \"Load more\"",
+        "description": "Commits added each time Load more is pressed.",
+        "type": "integer",
+        "default": 100,
+        "minimum": 10,
+        "maximum": 5000
+      },
+      {
+        "key": "dateFormat",
+        "title": "Date format",
+        "description": "How commit dates are shown.",
+        "type": "string",
+        "default": "date-time",
+        "enum": [
+          "date-time",
+          "date",
+          "relative"
+        ],
+        "enumLabels": [
+          "Date and time",
+          "Date only",
+          "Relative (5 minutes ago)"
+        ]
+      },
+      {
+        "key": "dateType",
+        "title": "Date type",
+        "description": "Which date the Date column and ordering show.",
+        "type": "string",
+        "default": "author",
+        "enum": [
+          "author",
+          "commit"
+        ],
+        "enumLabels": [
+          "Author date",
+          "Commit date"
+        ]
+      },
+      {
+        "key": "showRemoteBranches",
+        "title": "Show remote branches",
+        "description": "Include remote-tracking branches in the graph.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "showTags",
+        "title": "Show tags",
+        "description": "Include tags in the graph.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "showStashes",
+        "title": "Show stashes",
+        "description": "Show stashes as rows attached to their base commit.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "showUncommittedChanges",
+        "title": "Show uncommitted changes",
+        "description": "Show a row for the working tree when it has changes.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "showUntrackedFiles",
+        "title": "Count untracked files",
+        "description": "Include untracked files in the uncommitted changes row.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "muteMergeCommits",
+        "title": "Mute merge commits",
+        "description": "Draw merge commits in a muted style.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "useMailmap",
+        "title": "Use .mailmap",
+        "description": "Resolve author names and emails through the repository .mailmap.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "showSignatureStatus",
+        "title": "Show signature status",
+        "description": "Check commit signatures and mark them in the graph (slower on big repositories).",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "fetchAvatars",
+        "title": "Fetch avatars",
+        "description": "Download author avatars from Gravatar. This sends a hash of each author email to gravatar.com.",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "refLabelAlignment",
+        "title": "Ref label alignment",
+        "description": "Where branch and tag labels sit in the commit message column.",
+        "type": "string",
+        "default": "normal",
+        "enum": [
+          "normal",
+          "branches-left",
+          "branches-right"
+        ],
+        "enumLabels": [
+          "Next to the message",
+          "Branches left, tags right",
+          "Branches right, tags left"
+        ]
+      },
+      {
+        "key": "customBranchGlobPatterns",
+        "title": "Custom branch globs",
+        "description": "One per line as \"Name|glob\", for example \"Release|refs/heads/release/*\". Shown in the branch filter.",
+        "type": "string",
+        "default": "",
+        "multiline": true,
+        "maxLength": 2000
+      },
+      {
+        "key": "customEmojiShortcodes",
+        "title": "Custom emoji shortcodes",
+        "description": "JSON object mapping shortcode names to characters, for example {\"shipit\": \"🚀\"}.",
+        "type": "string",
+        "default": "",
+        "multiline": true,
+        "maxLength": 4000
+      }
     ]
   },
   "capabilities": [
     {
       "kind": "workspace:read"
+    },
+    {
+      "kind": "workspace:write"
+    },
+    {
+      "kind": "terminal:send"
+    },
+    {
+      "kind": "storage:own"
+    },
+    {
+      "kind": "settings:own"
     }
   ]
 }

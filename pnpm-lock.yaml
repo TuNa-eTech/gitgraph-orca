@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      lucide-preact:
+        specifier: ^1.70.0
+        version: 1.70.0(preact@10.29.8)
       preact:
         specifier: ^10.27.2
         version: 10.29.8
@@ -188,6 +191,11 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  lucide-preact@1.70.0:
+    resolution: {integrity: sha512-XfEovD/QCApU62QzAjNZldLuN8hxvJcs7l0Csg1mBlUi3inASrU/qH0dE90HGp7KhxAD3BFO9sX/34cBr8MzFA==}
+    peerDependencies:
+      preact: ^10.27.2 || ^11.0.0-0
+
   preact@10.29.8:
     resolution: {integrity: sha512-ej2aVZ+vZ8WO7tvlQWRM9N63A0KzF9q4mWJfDUHgYaIofWY9hu74QdnQrjoPMmZi2/nZ5gN0bJCQF49xQqx09Q==}
     peerDependencies:
@@ -316,6 +324,10 @@ snapshots:
       '@esbuild/win32-arm64': 0.28.2
       '@esbuild/win32-ia32': 0.28.2
       '@esbuild/win32-x64': 0.28.2
+
+  lucide-preact@1.70.0(preact@10.29.8):
+    dependencies:
+      preact: 10.29.8
 
   preact@10.29.8: {}
 
