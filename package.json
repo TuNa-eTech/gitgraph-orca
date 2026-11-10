@@ -1,0 +1,23 @@
+{
+  "name": "git-graph",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "types": "orca plugin types .",
+    "typecheck": "tsc -p src/panel && tsc -p src/worker",
+    "test": "orca plugin test .",
+    "validate": "orca plugin validate .",
+    "dev": "orca plugin dev watch ."
+  },
+  "dependencies": {
+    "preact": "^10.27.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3"
+  }
+}

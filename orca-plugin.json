@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
+  "manifestVersion": 2,
+  "id": "git-graph",
+  "name": "Git Graph",
+  "version": "0.1.0",
+  "description": "Shows the commit graph of the focused workspace's Git repository.",
+  "icon": "assets/icon.png",
+  "engines": {
+    "orca": ">=1.4.246"
+  },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "src/worker/main.ts",
+  "contributes": {
+    "panels": [
+      {
+        "id": "git-graph",
+        "title": "Git Graph",
+        "icon": "layers",
+        "entry": "dist/panel/index.html"
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "kind": "workspace:read"
+    }
+  ]
+}

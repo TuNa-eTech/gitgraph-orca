@@ -1,0 +1,96 @@
+/* Orca's colours reach the frame as --orca-* variables; theme switches update them in place. */
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  font: 12px/1.4 system-ui, sans-serif;
+  color: var(--orca-foreground);
+  background: var(--orca-background);
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--orca-border);
+  background: var(--orca-background);
+}
+
+.toolbar .title {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button {
+  padding: 2px 8px;
+  font: inherit;
+  color: var(--orca-foreground);
+  background: var(--orca-secondary);
+  border: 1px solid var(--orca-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.message {
+  padding: 12px 8px;
+  color: var(--orca-muted-foreground);
+}
+
+.message.error {
+  color: var(--orca-destructive);
+  white-space: pre-wrap;
+}
+
+.commits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.commit {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.commit:hover {
+  background: var(--orca-accent);
+}
+
+.hash {
+  font-family: ui-monospace, monospace;
+  color: var(--orca-muted-foreground);
+}
+
+.subject {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ref {
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--orca-primary-foreground);
+  background: var(--orca-primary);
+  border-radius: 3px;
+}
+
+.author {
+  color: var(--orca-muted-foreground);
+}

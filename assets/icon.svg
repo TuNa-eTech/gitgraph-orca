@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="56" fill="#1e1f26"/>
+  <g fill="none" stroke-width="14" stroke-linecap="round">
+    <!-- main lane -->
+    <path d="M88 40 V216" stroke="#4f9cf9"/>
+    <!-- feature lane: branches off the bottom commit, merges back at the top -->
+    <path d="M88 184 C88 152 168 160 168 128 V112 C168 88 88 96 88 72" stroke="#f5a524"/>
+  </g>
+  <g stroke="#1e1f26" stroke-width="8">
+    <circle cx="88" cy="72" r="22" fill="#4f9cf9"/>
+    <circle cx="168" cy="120" r="22" fill="#f5a524"/>
+    <circle cx="88" cy="184" r="22" fill="#4f9cf9"/>
+  </g>
+</svg>

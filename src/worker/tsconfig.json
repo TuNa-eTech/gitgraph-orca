@@ -1,0 +1,10 @@
+{
+  "extends": "../../.orca/types/tsconfig.json",
+  "compilerOptions": {
+    "types": ["orca-host", "orca-worker", "orca-frame", "orca-services", "orca-testing", "node"],
+    "preserveSymlinks": false,
+    "typeRoots": ["../../.orca/types", "../../node_modules/@types"],
+    "lib": ["ES2022"]
+  },
+  "include": [".", "../shared"]
+}
